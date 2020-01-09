@@ -1,8 +1,9 @@
 import os
+import pickle
 import sys
 import unittest
 
-from django.core.files import temp
+from django.core.files import File, temp
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import TemporaryUploadedFile
 from django.db.utils import IntegrityError
@@ -94,3 +95,28 @@ class FileFieldTests(TestCase):
         # open() doesn't write to disk.
         d.myfile.file = ContentFile(b'', name='bla')
         self.assertEqual(d.myfile, d.myfile.open())
+
+    def test_media_root_pathlib(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with override_settings(MEDIA_ROOT=Path(tmp_dir)):
+                with TemporaryUploadedFile('foo.txt', 'text/plain', 1, 'utf-8') as tmp_file:
+                    Document.objects.create(myfile=tmp_file)
+                    self.assertTrue(os.path.exists(os.path.join(tmp_dir, 'unused', 'foo.txt')))
+
+    def test_pickle(self):
+        with open(__file__, 'rb') as fp:
+            file1 = File(fp, name='test_file.py')
+            document = Document(myfile='test_file.py')
+            document.myfile.save('test_file.py', file1)
+
+            dump = pickle.dumps(document)
+            loaded_document = pickle.loads(dump)
+            self.assertEqual(document.myfile, loaded_document.myfile)
+            self.assertEqual(document.myfile.url, loaded_document.myfile.url)
+            self.assertEqual(document.myfile.storage, loaded_document.myfile.storage)
+            self.assertEqual(document.myfile.instance, loaded_document.myfile.instance)
+            self.assertEqual(document.myfile.field, loaded_document.myfile.field)
+
+            myfile_dump = pickle.dumps(document.myfile)
+            loaded_myfile = pickle.loads(myfile_dump)
+            self.assertEqual(document.myfile, loaded_myfile)
